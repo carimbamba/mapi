@@ -1,0 +1,5 @@
+{
+  "db_type": "postgresql",
+  "migration_type": "prisma",
+  "lint_db": false
+}

@@ -1,0 +1,233 @@
+// MAPI — Prisma Schema
+// Database: PostgreSQL (Supabase + PgBouncer)
+// Gerado por Database Architect
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider          = "postgresql"
+  url               = env("DATABASE_URL")
+  directUrl         = env("DIRECT_URL")
+  shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
+}
+
+// ─── Enums ───────────────────────────────────────────────────────────────────
+
+enum PlanType {
+  FREE
+  PREMIUM
+  SCHOOL
+}
+
+enum DiagnosisType {
+  TEA
+  TDAH
+  TOD
+  DISLEXIA
+  DISCALCULIA
+  ALTAS_HABILIDADES
+  OUTRO
+  NAO_INFORMADO
+}
+
+enum LayoutType {
+  ROWS
+  GROUPS
+  U_SHAPE
+  CUSTOM
+}
+
+enum RuleType {
+  KEEP_TOGETHER
+  KEEP_APART
+  NEAR_FRONT
+  NEAR_TEACHER
+  NEAR_EXIT
+  AVOID_WINDOW
+}
+
+enum LogCategory {
+  COMPORTAMENTO
+  CRISE
+  PROGRESSO
+  COMUNICACAO_FAMILIA
+  AVALIACAO
+  OUTRO
+}
+
+enum LogVisibility {
+  PRIVATE
+  SCHOOL
+  FAMILY
+}
+
+// ─── Models ──────────────────────────────────────────────────────────────────
+
+model Teacher {
+  id               String   @id @default(uuid())
+  supabaseUserId   String   @unique @map("supabase_user_id")
+  name             String
+  email            String
+  school           String?
+  planType         PlanType @default(FREE) @map("plan_type")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+  deletedAt        DateTime? @map("deleted_at")
+
+  // Onboarding
+  onboardingCompleted Boolean @default(false) @map("onboarding_completed")
+  onboardingSteps     Json    @default("[]") @map("onboarding_steps") // [1,2,3] completed steps
+  lastTooltipStep     Int     @default(0) @map("last_tooltip_step")
+
+  // Relations
+  classes          Class[]
+  accessibilityLogs AccessibilityLog[]
+
+  @@index([supabaseUserId])
+  @@index([email])
+  @@index([deletedAt])
+  @@index([onboardingCompleted])
+  @@map("teachers")
+}
+
+model Class {
+  id          String    @id @default(uuid())
+  teacherId   String    @map("teacher_id")
+  name        String
+  subject     String?
+  year        String
+  period      String?
+  isArchived  Boolean   @default(false) @map("is_archived")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
+
+  // Relations
+  teacher      Teacher         @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  students     Student[]
+  seatingMaps  SeatingMap[]
+  rules        SeatingRule[]
+
+  @@index([teacherId])
+  @@index([isArchived])
+  @@index([deletedAt])
+  @@index([teacherId, isArchived])
+  @@map("classes")
+}
+
+model Student {
+  id                    String         @id @default(uuid())
+  classId               String         @map("class_id")
+  name                  String
+  hasAccessibilityNeeds Boolean        @default(false) @map("has_accessibility_needs")
+  diagnosisType         DiagnosisType? @map("diagnosis_type")
+  diagnosisNotes        String?        @map("diagnosis_notes")
+  prioritySeating       Boolean        @default(false) @map("priority_seating")
+  parentConsent         Boolean        @default(false) @map("parent_consent")
+  createdAt             DateTime       @default(now()) @map("created_at")
+  updatedAt             DateTime       @updatedAt @map("updated_at")
+  deletedAt             DateTime?      @map("deleted_at")
+
+  // Relations
+  class            Class             @relation(fields: [classId], references: [id], onDelete: Cascade)
+  seatingPositions StudentPosition[]
+  accessibilityLogs AccessibilityLog[]
+  rulesAsStudentA  SeatingRule[]     @relation("StudentARules")
+  rulesAsStudentB  SeatingRule[]     @relation("StudentBRules")
+
+  @@index([classId])
+  @@index([deletedAt])
+  @@index([hasAccessibilityNeeds])
+  @@index([diagnosisType])
+  @@index([classId, deletedAt])
+  @@map("students")
+}
+
+model SeatingMap {
+  id          String     @id @default(uuid())
+  classId     String     @map("class_id")
+  name        String
+  layoutType  LayoutType @map("layout_type")
+  layoutConfig Json       @map("layout_config")
+  isActive    Boolean    @default(false) @map("is_active")
+  createdAt   DateTime   @default(now()) @map("created_at")
+  updatedAt   DateTime   @updatedAt @map("updated_at")
+
+  // Relations
+  class     Class             @relation(fields: [classId], references: [id], onDelete: Cascade)
+  positions StudentPosition[]
+
+  @@index([classId])
+  @@index([isActive])
+  @@index([classId, isActive])
+  @@map("seating_maps")
+}
+
+model StudentPosition {
+  id           String @id @default(uuid())
+  seatingMapId String @map("seating_map_id")
+  studentId    String @map("student_id")
+  positionX    Int    @map("position_x")
+  positionY    Int    @map("position_y")
+  deskId       String @map("desk_id")
+
+  // Relations
+  seatingMap SeatingMap @relation(fields: [seatingMapId], references: [id], onDelete: Cascade)
+  student    Student    @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([seatingMapId, studentId])
+  @@index([seatingMapId])
+  @@index([studentId])
+  @@index([deskId])
+  @@map("student_positions")
+}
+
+model SeatingRule {
+  id         String    @id @default(uuid())
+  classId    String    @map("class_id")
+  ruleType   RuleType  @map("rule_type")
+  studentAId String    @map("student_a_id")
+  studentBId String?   @map("student_b_id")
+  priority   Int       @default(1)
+  isActive   Boolean   @default(true) @map("is_active")
+
+  // Relations
+  class     Class    @relation(fields: [classId], references: [id], onDelete: Cascade)
+  studentA  Student  @relation("StudentARules", fields: [studentAId], references: [id], onDelete: Cascade)
+  studentB  Student? @relation("StudentBRules", fields: [studentBId], references: [id], onDelete: SetNull)
+
+  @@index([classId])
+  @@index([studentAId])
+  @@index([studentBId])
+  @@index([isActive])
+  @@index([classId, isActive])
+  @@index([ruleType])
+  @@map("seating_rules")
+}
+
+model AccessibilityLog {
+  id          String         @id @default(uuid())
+  studentId   String         @map("student_id")
+  teacherId   String         @map("teacher_id")
+  logDate     DateTime       @map("log_date")
+  category    LogCategory
+  description String         @db.Text
+  visibility  LogVisibility  @default(PRIVATE)
+  createdAt   DateTime       @default(now()) @map("created_at")
+  deletedAt   DateTime?      @map("deleted_at")
+
+  // Relations
+  student Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  teacher Teacher  @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+
+  @@index([studentId])
+  @@index([teacherId])
+  @@index([logDate])
+  @@index([category])
+  @@index([visibility])
+  @@index([studentId, logDate])
+  @@index([teacherId, logDate])
+  @@map("accessibility_logs")
+}
