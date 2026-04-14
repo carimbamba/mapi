@@ -39,3 +39,11 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Private files
+/RELATORIO_FINAL.md
+/QA_CHECKLIST.md
+/AGENTS.md
+/CLAUDE.md
+/DECLARACAO_LANCAMENTO.md
+/LGPD_CHECKLIST.md
